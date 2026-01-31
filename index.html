@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>橋牌計分器</title>
+    <style>
+        /* 簡單的 CSS 樣式，讓畫面乾淨、置中 */
+        body {
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 320px;
+            text-align: center;
+        }
+        h2 { color: #2c3e50; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1rem; text-align: left; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: bold; color: #555; }
+        select {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 1rem;
+            background-color: #fff;
+        }
+        .result-box {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: #e8f5e9; /* 贏分的綠色背景 */
+            border-radius: 8px;
+            border: 1px solid #c8e6c9;
+        }
+        .result-score {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        .result-desc { color: #666; margin-top: 0.5rem; }
+        
+        /* 負分時的樣式切換 */
+        .result-box.penalty {
+            background-color: #ffebee;
+            border-color: #ffcdd2;
+        }
+        .result-box.penalty .result-score { color: #c62828; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>♠️ 橋牌計分器</h2>
+
+    <div class="form-group">
+        <label>合約線位 (Level)</label>
+        <select id="level">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6 (小滿貫)</option>
+            <option value="7">7 (大滿貫)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>花色 (Suit)</label>
+        <select id="suit">
+            <option value="C">♣️ 梅花 (Clubs)</option>
+            <option value="D">♦️ 方塊 (Diamonds)</option>
+            <option value="H">♥️ 愛心 (Hearts)</option>
+            <option value="S">♠️ 黑桃 (Spades)</option>
+            <option value="NT">🚫 無王 (No Trump)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>吃到墩數 (Tricks Won)</label>
+        <select id="tricksWon">
+            </select>
+    </div>
+
+    <div id="resultBox" class="result-box">
+        <div id="scoreOutput" class="result-score">0</div>
+        <div id="scoreDesc" class="result-desc">等待輸入...</div>
+    </div>
+</div>
+
+<script>
+    // 初始化墩數選單 (0-13)
+    const tricksSelect = document.getElementById('tricksWon');
+    for (let i = 0; i <= 13; i++) {
+        const option = document.createElement('option');
+        option.value = i;
+        option.text = i;
+        if (i === 7) option.selected = true; // 預設 7 墩
+        tricksSelect.appendChild(option);
+    }
+
+    // 監聽所有輸入欄位的變化，一有變動就重新計算
+    const inputs = ['level', 'suit', 'tricksWon'];
+    inputs.forEach(id => {
+        document.getElementById(id).addEventListener('change', calculateScore);
+    });
+
+    function calculateScore() {
+        // 取得使用者輸入
+        const level = parseInt(document.getElementById('level').value);
+        const suit = document.getElementById('suit').value;
+        const tricksWon = parseInt(document.getElementById('tricksWon').value);
+        
+        // 基本規則參數
+        const contractTarget = level + 6; // 合約目標墩數
+        const diff = tricksWon - contractTarget; // 實際與目標的差 (>=0 為成約, <0 為倒約)
+        
+        let score = 0;
+        let desc = "";
+        const isVul = false; // 為了簡化，此版本預設為「無身價」(Non-Vulnerable)
+        const isDoubled = false; // 為了簡化，此版本預設為「未賭倍」
+
+        if (diff >= 0) {
+            // --- 成約 (Made) ---
+            
+            // 1. 計算墩分 (Trick Score)
+            let trickScore = 0;
+            if (suit === 'C' || suit === 'D') {
+                trickScore = level * 20;
+            } else if (suit === 'H' || suit === 'S') {
+                trickScore = level * 30;
+            } else if (suit === 'NT') {
+                trickScore = 40 + (level - 1) * 30;
+            }
+
+            // 2. 計算超墩 (Overtricks)
+            let overtrickScore = 0;
+            if (diff > 0) {
+                if (suit === 'C' || suit === 'D') overtrickScore = diff * 20;
+                else overtrickScore = diff * 30; // H, S, NT 超墩皆為 30
+            }
+
+            // 3. 判定成局獎分 (Game) 或 部分合約 (Part Score)
+            let bonus = 0;
+            if (trickScore >= 100) {
+                bonus = isVul ? 500 : 300; // 成局獎分
+                desc = "成局 (Game)";
+            } else {
+                bonus = 50; // 部分合約獎分
+                desc = "部分合約 (Part Score)";
+            }
+
+            // 4. 滿貫獎分 (Slam)
+            if (level === 6) {
+                bonus += isVul ? 750 : 500;
+                desc = "小滿貫 (Small Slam)";
+            } else if (level === 7) {
+                bonus += isVul ? 1500 : 1000;
+                desc = "大滿貫 (Grand Slam)";
+            }
+
+            score = trickScore + overtrickScore + bonus;
+            
+            // 更新 UI 樣式 (贏分)
+            document.getElementById('resultBox').classList.remove('penalty');
+            document.getElementById('scoreDesc').innerText = `${desc} + 超墩 ${diff}`;
+
+        } else {
+            // --- 倒約 (Down) ---
+            const undertricks = Math.abs(diff);
+            
+            // 無身價、未賭倍每墩倒 50 分
+            score = -(undertricks * 50);
+
+            // 更新 UI 樣式 (輸分)
+            document.getElementById('resultBox').classList.add('penalty');
+            document.getElementById('scoreDesc').innerText = `倒約 ${undertricks} 墩`;
+        }
+
+        // 輸出分數
+        document.getElementById('scoreOutput').innerText = score;
+    }
+
+    // 頁面載入時先算一次
+    calculateScore();
+</script>
+
+</body>
+</html>
