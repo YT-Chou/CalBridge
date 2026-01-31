@@ -25,7 +25,6 @@
         }
         h2 { margin-top: 0; color: #1a1a1a; margin-bottom: 1.5rem; }
         
-        /* 兩欄佈局 */
         .row { display: flex; gap: 10px; margin-bottom: 1rem; }
         .col { flex: 1; text-align: left; }
 
@@ -37,11 +36,10 @@
             border-radius: 8px;
             font-size: 1rem;
             background-color: #f9f9f9;
-            box-sizing: border-box; /* 確保寬度包含 padding */
+            box-sizing: border-box; 
         }
         select:focus { border-color: #4a90e2; outline: none; }
 
-        /* 身價開關樣式 */
         .vul-wrapper {
             display: flex;
             align-items: center;
@@ -54,7 +52,7 @@
         .vul-wrapper label { margin: 0; cursor: pointer; }
         input[type="checkbox"] { transform: scale(1.5); cursor: pointer; }
 
-        /* 結果框 */
+        /* 結果區塊 */
         .result-box {
             margin-top: 1.5rem;
             padding: 1.5rem;
@@ -63,8 +61,19 @@
             border: 2px solid #bae6fd;
             transition: all 0.3s ease;
         }
+        
+        /* 新增：合約術語顯示 (例如 5C X -3) */
+        .contract-text {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 0.5rem;
+            font-family: "Arial Black", "Helvetica Neue", sans-serif; /* 用粗體字更顯眼 */
+            letter-spacing: 1px;
+        }
+
         .result-score {
-            font-size: 3rem;
+            font-size: 2.5rem; /* 分數稍微縮小一點點，讓視覺平衡 */
             font-weight: 800;
             color: #0284c7;
             line-height: 1.2;
@@ -77,6 +86,7 @@
             border-color: #fecaca;
         }
         .result-box.penalty .result-score { color: #dc2626; }
+        .result-box.penalty .contract-text { color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -130,8 +140,9 @@
     </div>
 
     <div id="resultBox" class="result-box">
-        <div id="scoreOutput" class="result-score">0</div>
-        <div id="scoreDesc" class="result-desc">等待輸入...</div>
+        <div id="contractOutput" class="contract-text">1C =</div>
+        <div id="scoreOutput" class="result-score">70</div>
+        <div id="scoreDesc" class="result-desc">部分合約</div>
     </div>
 </div>
 
@@ -156,7 +167,7 @@
         // 1. 讀取數值
         const level = parseInt(document.getElementById('level').value);
         const suit = document.getElementById('suit').value;
-        const doubleFactor = parseInt(document.getElementById('doubleState').value); // 1, 2, or 4
+        const doubleFactor = parseInt(document.getElementById('doubleState').value);
         const isVul = document.getElementById('isVul').checked;
         const tricksWon = parseInt(document.getElementById('tricksWon').value);
         
@@ -167,95 +178,88 @@
         let descText = "";
         const resultBox = document.getElementById('resultBox');
 
+        // === 產生術語字串 (例如 5C X -3) ===
+        let notation = `${level}${suit}`;
+        
+        // 處理賭倍符號
+        if (doubleFactor === 2) notation += " X";
+        else if (doubleFactor === 4) notation += " XX";
+
+        // 處理結果 (=, +1, -2)
+        if (diff === 0) notation += " =";
+        else if (diff > 0) notation += " +" + diff;
+        else notation += " " + diff; // diff 本身是負數，如 -3
+
+        // 更新術語顯示
+        document.getElementById('contractOutput').innerText = notation;
+
+        // === 計算分數 ===
         if (diff >= 0) {
-            // ================= 成約 (Made) =================
+            // 成約 (Made)
             resultBox.classList.remove('penalty');
 
-            // A. 計算基本墩分 (Trick Score)
             let baseTrickScore = 0;
-            if (suit === 'C' || suit === 'D') {
-                baseTrickScore = level * 20;
-            } else if (suit === 'H' || suit === 'S') {
-                baseTrickScore = level * 30;
-            } else if (suit === 'NT') {
-                baseTrickScore = 40 + (level - 1) * 30;
-            }
+            if (suit === 'C' || suit === 'D') baseTrickScore = level * 20;
+            else if (suit === 'H' || suit === 'S') baseTrickScore = level * 30;
+            else if (suit === 'NT') baseTrickScore = 40 + (level - 1) * 30;
 
-            // 乘上賭倍係數 (2 或 4)
             let finalTrickScore = baseTrickScore * doubleFactor;
 
-            // B. 獎分計算
-            // 判斷是否成局 (Game): 墩分 >= 100
             let gameBonus = 0;
             if (finalTrickScore >= 100) {
                 gameBonus = isVul ? 500 : 300;
-                descText = "成局 (Game)";
+                descText = "成局";
             } else {
-                gameBonus = 50; // 部分合約 (Part Score)
-                descText = "部分合約 (Part Score)";
+                gameBonus = 50;
+                descText = "部分合約";
             }
 
-            // 滿貫獎分 (Slam) - 與賭倍無關，只看身價
             let slamBonus = 0;
             if (level === 6) {
                 slamBonus = isVul ? 750 : 500;
-                descText = "小滿貫 (Small Slam)";
+                descText = "小滿貫";
             } else if (level === 7) {
                 slamBonus = isVul ? 1500 : 1000;
-                descText = "大滿貫 (Grand Slam)";
+                descText = "大滿貫";
             }
 
-            // 賭倍/再賭倍 額外獎勵 (Insult Bonus)
             let insultBonus = 0;
             if (doubleFactor === 2) insultBonus = 50;
             if (doubleFactor === 4) insultBonus = 100;
 
-            // C. 超墩分數 (Overtricks)
             let overtrickScore = 0;
             if (diff > 0) {
                 if (doubleFactor === 1) {
-                    // 未賭倍：同基本墩分 (NT/H/S=30, C/D=20)
                     let perTrick = (suit === 'C' || suit === 'D') ? 20 : 30;
                     overtrickScore = diff * perTrick;
                 } else if (doubleFactor === 2) {
-                    // 賭倍：有身價 200/墩，無身價 100/墩
                     overtrickScore = diff * (isVul ? 200 : 100);
                 } else if (doubleFactor === 4) {
-                    // 再賭倍：有身價 400/墩，無身價 200/墩
                     overtrickScore = diff * (isVul ? 400 : 200);
                 }
             }
 
             totalScore = finalTrickScore + gameBonus + slamBonus + insultBonus + overtrickScore;
-            
-            if (diff > 0) descText += ` + 超墩 ${diff}`;
 
         } else {
-            // ================= 倒約 (Down) =================
+            // 倒約 (Down)
             resultBox.classList.add('penalty');
-            const down = Math.abs(diff); // 倒幾墩
+            const down = Math.abs(diff);
             let penalty = 0;
 
             if (doubleFactor === 1) {
-                // --- 未賭倍 ---
-                // 有身價: 100/墩, 無身價: 50/墩
                 penalty = down * (isVul ? 100 : 50);
             } else if (doubleFactor === 2) {
-                // --- 賭倍 (Doubled) ---
                 if (!isVul) {
-                    // 無身價賭倍: 第一墩100, 2~3墩各200, 4墩以上各300
                     if (down === 1) penalty = 100;
-                    else if (down === 2) penalty = 100 + 200; // 300
-                    else if (down === 3) penalty = 100 + 200 + 200; // 500
+                    else if (down === 2) penalty = 300;
+                    else if (down === 3) penalty = 500;
                     else penalty = 500 + (down - 3) * 300;
                 } else {
-                    // 有身價賭倍: 第一墩200, 之後每墩300
                     if (down === 1) penalty = 200;
                     else penalty = 200 + (down - 1) * 300;
                 }
             } else if (doubleFactor === 4) {
-                // --- 再賭倍 (Redoubled) ---
-                // 邏輯是賭倍罰分的 2 倍
                 let basePenalty = 0;
                 if (!isVul) {
                     if (down === 1) basePenalty = 100;
@@ -277,7 +281,6 @@
         document.getElementById('scoreDesc').innerText = descText;
     }
 
-    // 初始計算
     calculateScore();
 </script>
 
